@@ -1,0 +1,39 @@
+{
+  "name": "mechansim",
+  "version": "0.0.0",
+  "description": "Web applet illustrating concepts in mechanism design through simulations",
+  "main": "bundle.js",
+  "scripts": {
+    "test": "exit 1",
+    "build": "browserify main.jsx -o bundle.js -d",
+    "watch": "watchify main.jsx -o bundle.js -d -v"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/luac/mechansim.git"
+  },
+  "author": "Anthony Lu",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/luac/mechansim/issues"
+  },
+  "homepage": "https://github.com/luac/mechansim#readme",
+  "dependencies": {
+    "react": "^0.13.3"
+  },
+  "devDependencies": {
+    "browserify": "^10.2.1",
+    "reactify": "^1.1.1",
+    "watchify": "^3.2.1"
+  },
+  "browserify": {
+    "transform": [
+      [
+        "reactify",
+        {
+          "es6": true
+        }
+      ]
+    ]
+  }
+}
