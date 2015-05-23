@@ -2,7 +2,7 @@
   "name": "mechansim",
   "version": "0.0.0",
   "description": "Web applet illustrating concepts in mechanism design through simulations",
-  "main": "bundle.js",
+  "main": "main.jsx",
   "scripts": {
     "test": "exit 1",
     "build": "browserify main.jsx -o bundle.js -d",
@@ -19,7 +19,8 @@
   },
   "homepage": "https://github.com/luac/mechansim#readme",
   "dependencies": {
-    "react": "^0.13.3"
+    "react": "^0.13.3",
+    "react-d3": "^0.3.1"
   },
   "devDependencies": {
     "browserify": "^10.2.1",
