@@ -14,5 +14,12 @@ function cumsum(xs) {
   });
 }
 
+function sorted(xs) {
+  var ret = xs.slice();
+  ret.sort();
+  return ret;
+}
+
 exports.sum = sum;
 exports.cumsum = cumsum;
+exports.sorted = sorted;

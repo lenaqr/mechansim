@@ -1,9 +1,13 @@
-var {sum} = require('./util');
+var {sum, sorted} = require('./util');
 
 var uniform01Dist = {
   sample: function () {
     return Math.random();
-  }
+  },
+  CDF: function (q) {
+    return q;
+  },
+  bestReserve: 0.5
 }
 
 function vickreyWithReservePrice(reserve, bids) {
@@ -34,7 +38,22 @@ function vickreyMechanism(dist, bids) {
 }
 
 function myersonMechanism(dist, bids) {
-  return vickreyWithReservePrice(0.5, bids);
+  return vickreyWithReservePrice(dist.bestReserve, bids);
+}
+
+function learnedMechanism(dist, bids, bidData) {
+  var bidData = sorted(bidData);
+  var reservePrice = 0;
+  var bestRevenue = 0;
+  bidData.forEach((bid, i) => {
+    var q = (i+1)/(bidData.length+1);
+    var r = bid*(1-q);
+    if (r > bestRevenue) {
+      reservePrice = bid;
+      bestRevenue = r;
+    }
+  });
+  return vickreyWithReservePrice(reservePrice, bids);
 }
 
 function sampleBids(dist, n) {
@@ -45,13 +64,12 @@ function sampleBids(dist, n) {
   return bids;
 }
 
-function simulateAuction(dist, mechanism, players, rounds) {
+function simulateAuction(dist, mechanism, players, rounds, bidData) {
   var resultMessage;
   var revenueSeries = [];
-  var bidData = [];
   for (var k = 0; k < rounds; k++) {
     var bids = sampleBids(dist, players);
-    var result = mechanism(dist, bids);
+    var result = mechanism(dist, bids, bidData);
     revenueSeries.push(result.price);
     [].push.apply(bidData, bids)
   }
@@ -82,6 +100,7 @@ exports.bidderDists = {
 };
 exports.mechanisms = {
   vickrey: vickreyMechanism,
-  myerson: myersonMechanism
+  myerson: myersonMechanism,
+  learned: learnedMechanism,
 };
 exports.simulateAuction = simulateAuction;

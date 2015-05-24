@@ -2,7 +2,7 @@ var React = require('react');
 var HighCharts = require('react-highcharts');
 
 var auctions = require('./auctions');
-var {sum, cumsum} = require('./util');
+var {sum, cumsum, sorted} = require('./util');
 
 var bidderDistOptions = [
   {value: 'uniform01', text: 'Uniform[0,1]'}
@@ -16,15 +16,18 @@ var bidderDists = {
 var bidderNumOptions = [1,2,3,4,5,6,7,8,9];
 var mechanismOptions = [
   {value: 'vickrey', text: 'Vickrey (no reserve price)'},
-  {value: 'myerson', text: 'Myerson (optimal reserve price)'}
+  {value: 'myerson', text: 'Myerson (optimal reserve price)'},
+  {value: 'learned', text: 'Learned (inferred reserve price)'},
 ];
 var mechanismNames = {
   vickrey: 'Vickrey',
-  myerson: 'Myerson'
+  myerson: 'Myerson',
+  learned: 'learned Myerson'
 };
 var mechanisms = {
   vickrey: auctions.mechanisms.vickrey,
-  myerson: auctions.mechanisms.myerson
+  myerson: auctions.mechanisms.myerson,
+  learned: auctions.mechanisms.learned
 };
 var simulateOptions = [1,10,100,1000,10000];
 
@@ -35,7 +38,8 @@ var App = React.createClass({
       bidderDistribution: 'uniform01',
       numBidders: 2,
       mechanism: 'vickrey',
-      revenueSeries: []
+      revenueSeries: [],
+      bidData: []
     };
   },
   emitMessage: function (message) {
@@ -47,19 +51,19 @@ var App = React.createClass({
     var bidderDistribution = event.target.value;
     this.emitMessage(`Selected bidder distribution: ${bidderDistNames[bidderDistribution]}`);
     this.setState({bidderDistribution});
-    this.setState({revenueSeries: []});
+    this.setState({revenueSeries: [], bidData: []});
   },
   changeNumBidders: function (event) {
     var numBidders = event.target.value;
     this.emitMessage(`Selected number of bidders: ${numBidders}`);
     this.setState({numBidders});
-    this.setState({revenueSeries: []});
+    this.setState({revenueSeries: [], bidData: []});
   },
   changeMechanism: function (event) {
     var mechanism = event.target.value;
     this.emitMessage(`Selected mechanism: ${mechanismNames[mechanism]}`);
     this.setState({mechanism});
-    this.setState({revenueSeries: []});
+    this.setState({revenueSeries: [], bidData: []});
   },
   simulateAuction: function (event) {
     var numRounds = parseInt(event.target.value, 10);
@@ -68,10 +72,12 @@ var App = React.createClass({
     var mechanismName = mechanismNames[this.state.mechanism];
     var bidderDistribution = bidderDists[this.state.bidderDistribution];
     var mechanism = mechanisms[this.state.mechanism];
-    var result = auctions.simulateAuction(bidderDistribution, mechanism, numBidders, numRounds);
+    var bidData = this.state.bidData;
+    var result = auctions.simulateAuction(bidderDistribution, mechanism, numBidders, numRounds, bidData);
     this.emitMessage(`Simulated ${mechanismName} auction with ${numBidders} ${bidderDistributionName} bidders (${numRounds} times). ${result.message}`);
-    this.setState(({revenueSeries}) => ({
-      revenueSeries: revenueSeries.concat(result.revenueSeries)
+    this.setState(({revenueSeries, bidData}) => ({
+      revenueSeries: revenueSeries.concat(result.revenueSeries),
+      bidData: result.bidData
     }));
   },
   render: function () {
@@ -85,7 +91,7 @@ var App = React.createClass({
                      onMechanismChange={this.changeMechanism}
                      onSimulate={this.simulateAuction} />
         <hr />
-        <OutputPane messages={this.state.messages} revenueSeries={this.state.revenueSeries} />
+        <OutputPane values={this.state} />
       </div>
     );
   }
@@ -149,8 +155,8 @@ var OutputPane = React.createClass({
     return (
       // <div className="outputPane">OutputPane placeholder</div>
       <table className="outputPane" style={styles.table}><tr>
-        <td style={styles.td}><MessageBox messages={this.props.messages} /></td>
-        <td style={styles.td}><DataBox revenueSeries={this.props.revenueSeries} /></td>
+        <td style={styles.td}><MessageBox messages={this.props.values.messages} /></td>
+        <td style={styles.td}><DataBox revenueSeries={this.props.values.revenueSeries} bidData={this.props.values.bidData} mechanism={this.props.values.mechanism} bidderDistribution={this.props.values.bidderDistribution} /></td>
       </tr></table>
     );
   }
@@ -186,8 +192,8 @@ var DataBox = React.createClass({
     var cumulativeRevenue = cumsum(revenueSeries);
     var totalRevenue = cumulativeRevenue[numRounds];
     var averageRevenue = totalRevenue/numRounds;
-    var lineChartConfig = {
-      title: {text: "Revenue per Round"},
+    var revenueChartConfig = {
+      title: {text: "Revenue per round"},
       xAxis: {
         min: 0,
         minRange: 1
@@ -198,9 +204,51 @@ var DataBox = React.createClass({
         minRange: 0.05
       },
       series: [{
-        name: "Myerson",
+        name: mechanismNames[this.props.mechanism],
         data: cumulativeRevenue
       }],
+      plotOptions: {
+        line: {animation: false}
+      }
+    };
+    var bidData = sorted(this.props.bidData);
+    var bidCDF = bidData.map((bid, i) => [(i+1)/(bidData.length+1), bid]);
+    var revenueCurve = bidCDF.map(([q, bid]) => [q, bid*(1-q)]);
+    revenueCurve.unshift([0,0]);
+    revenueCurve.push([1,0]);
+    var trueDist = bidderDists[this.props.bidderDistribution];
+    var trueCDF = Array.from(Array(101)).map((_, i) => [i/100, trueDist.CDF(i/100)]);
+    var trueRevenueCurve = trueCDF.map(([q, val]) => [q, val*(1-q)]);
+    var bidDataChartConfig = {
+      title: {text: "Value distribution"},
+      xAxis: {
+        title: {text: "Quantile"},
+        min: 0,
+        max: 1
+      },
+      yAxis: {
+        title: {text: "Value"},
+        min: 0,
+        minRange: 0.5
+      },
+      series: [
+        {
+          name: "Inferred distribution function",
+          data: bidCDF
+        },
+        {
+          name: "True distribution function",
+          data: trueCDF
+        },
+        {
+          name: "Inferred revenue curve",
+          data: revenueCurve
+        },
+        {
+          name: "True revenue curve",
+          data: trueRevenueCurve
+        }
+      ],
       plotOptions: {
         line: {animation: false}
       }
@@ -212,7 +260,8 @@ var DataBox = React.createClass({
         <li>Cumulative revenue: {totalRevenue.toFixed(3)}</li>
         <li>Average revenue per round: {averageRevenue.toFixed(3)}</li>
       </ul>
-        <HighCharts config={lineChartConfig} />
+        <HighCharts config={revenueChartConfig} />
+        <HighCharts config={bidDataChartConfig} />
       </div>
     );
     return ret;
