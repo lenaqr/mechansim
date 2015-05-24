@@ -64,13 +64,18 @@ function sampleBids(dist, n) {
   return bids;
 }
 
-function simulateAuction(dist, mechanism, players, rounds, bidData) {
+function simulateAuction(dist, mechanism, players, rounds, bidData, altMechanism) {
   var resultMessage;
   var revenueSeries = [];
+  var altRevenueSeries = [];
   for (var k = 0; k < rounds; k++) {
     var bids = sampleBids(dist, players);
     var result = mechanism(dist, bids, bidData);
     revenueSeries.push(result.price);
+    if (altMechanism !== undefined) {
+      var altResult = altMechanism(dist, bids, bidData);
+      altRevenueSeries.push(altResult.price);
+    }
     [].push.apply(bidData, bids)
   }
   if (rounds === 1) {
@@ -91,7 +96,8 @@ function simulateAuction(dist, mechanism, players, rounds, bidData) {
   return {
     message: resultMessage,
     revenueSeries: revenueSeries,
-    bidData: bidData
+    bidData: bidData,
+    altRevenueSeries: altRevenueSeries
   };
 }
 

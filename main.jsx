@@ -38,8 +38,10 @@ var App = React.createClass({
       bidderDistribution: 'uniform01',
       numBidders: 2,
       mechanism: 'vickrey',
+      altMechanism: 'none',
       revenueSeries: [],
-      bidData: []
+      bidData: [],
+      altRevenueSeries: []
     };
   },
   emitMessage: function (message) {
@@ -51,19 +53,25 @@ var App = React.createClass({
     var bidderDistribution = event.target.value;
     this.emitMessage(`Selected bidder distribution: ${bidderDistNames[bidderDistribution]}`);
     this.setState({bidderDistribution});
-    this.setState({revenueSeries: [], bidData: []});
+    this.setState({revenueSeries: [], bidData: [], altRevenueSeries: []});
   },
   changeNumBidders: function (event) {
     var numBidders = event.target.value;
     this.emitMessage(`Selected number of bidders: ${numBidders}`);
     this.setState({numBidders});
-    this.setState({revenueSeries: [], bidData: []});
+    this.setState({revenueSeries: [], bidData: [], altRevenueSeries: []});
   },
   changeMechanism: function (event) {
     var mechanism = event.target.value;
     this.emitMessage(`Selected mechanism: ${mechanismNames[mechanism]}`);
     this.setState({mechanism});
-    this.setState({revenueSeries: [], bidData: []});
+    this.setState({revenueSeries: [], bidData: [], altRevenueSeries: []});
+  },
+  changeAltMechanism: function (event) {
+    var altMechanism = event.target.value;
+    this.emitMessage(`Selected mechanism to compare: ${mechanismNames[altMechanism]}`);
+    this.setState({altMechanism});
+    this.setState({revenueSeries: [], bidData: [], altRevenueSeries: []});
   },
   simulateAuction: function (event) {
     var numRounds = parseInt(event.target.value, 10);
@@ -72,12 +80,14 @@ var App = React.createClass({
     var mechanismName = mechanismNames[this.state.mechanism];
     var bidderDistribution = bidderDists[this.state.bidderDistribution];
     var mechanism = mechanisms[this.state.mechanism];
+    var altMechanism = mechanisms[this.state.altMechanism];
     var bidData = this.state.bidData;
-    var result = auctions.simulateAuction(bidderDistribution, mechanism, numBidders, numRounds, bidData);
+    var result = auctions.simulateAuction(bidderDistribution, mechanism, numBidders, numRounds, bidData, altMechanism);
     this.emitMessage(`Simulated ${mechanismName} auction with ${numBidders} ${bidderDistributionName} bidders (${numRounds} times). ${result.message}`);
-    this.setState(({revenueSeries, bidData}) => ({
+    this.setState(({revenueSeries, bidData, altRevenueSeries}) => ({
       revenueSeries: revenueSeries.concat(result.revenueSeries),
-      bidData: result.bidData
+      bidData: result.bidData,
+      altRevenueSeries: altRevenueSeries.concat(result.altRevenueSeries)
     }));
   },
   render: function () {
@@ -89,6 +99,7 @@ var App = React.createClass({
                      onBidderDistChange={this.changeBidderDistribution}
                      onBidderNumChange={this.changeNumBidders}
                      onMechanismChange={this.changeMechanism}
+                     onAltMechanismChange={this.changeAltMechanism}
                      onSimulate={this.simulateAuction} />
         <hr />
         <OutputPane values={this.state} />
@@ -113,6 +124,10 @@ var ControlPane = React.createClass({
                   options={mechanismOptions}
                   value={this.props.values.mechanism}
                   onChange={this.props.onMechanismChange} />
+        <Selector label="Compare to"
+                  options={[{value: 'none', text: "None"}].concat(mechanismOptions)}
+                  value={this.props.values.altMechanism}
+                  onChange={this.props.onAltMechanismChange} />
         <SimulateButtons values={simulateOptions} onClick={this.props.onSimulate} />
       </form>
     );
@@ -156,7 +171,7 @@ var OutputPane = React.createClass({
       // <div className="outputPane">OutputPane placeholder</div>
       <table className="outputPane" style={styles.table}><tr>
         <td style={styles.td}><MessageBox messages={this.props.values.messages} /></td>
-        <td style={styles.td}><DataBox revenueSeries={this.props.values.revenueSeries} bidData={this.props.values.bidData} mechanism={this.props.values.mechanism} bidderDistribution={this.props.values.bidderDistribution} /></td>
+        <td style={styles.td}><DataBox revenueSeries={this.props.values.revenueSeries} bidData={this.props.values.bidData} mechanism={this.props.values.mechanism} bidderDistribution={this.props.values.bidderDistribution} altMechanism={this.props.values.altMechanism} altRevenueSeries={this.props.values.altRevenueSeries} /></td>
       </tr></table>
     );
   }
@@ -165,7 +180,7 @@ var OutputPane = React.createClass({
 var MessageBox = React.createClass({
   render: function () {
     var style = {
-      height: '30em',
+      height: '50em',
       border: '1px solid black',
       padding: '0 1em',
       overflowY: 'auto'
@@ -182,7 +197,7 @@ var MessageBox = React.createClass({
 var DataBox = React.createClass({
   render: function () {
     var style = {
-      height: '30em',
+      height: '50em',
       border: '1px solid black',
       padding: '0 1em',
       overflowY: 'auto'
@@ -192,6 +207,7 @@ var DataBox = React.createClass({
     var cumulativeRevenue = cumsum(revenueSeries);
     var totalRevenue = cumulativeRevenue[numRounds];
     var averageRevenue = totalRevenue/numRounds;
+    var altCumulativeRevenue = cumsum(this.props.altRevenueSeries);
     var revenueChartConfig = {
       title: {text: "Revenue per round"},
       xAxis: {
@@ -211,6 +227,12 @@ var DataBox = React.createClass({
         line: {animation: false}
       }
     };
+    if (this.props.altMechanism !== 'none') {
+      revenueChartConfig.series.push({
+        name: mechanismNames[this.props.altMechanism],
+        data: altCumulativeRevenue
+      });
+    }
     var bidData = sorted(this.props.bidData);
     var bidCDF = bidData.map((bid, i) => [(i+1)/(bidData.length+1), bid]);
     var revenueCurve = bidCDF.map(([q, bid]) => [q, bid*(1-q)]);
