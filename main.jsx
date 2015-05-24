@@ -1,11 +1,17 @@
 var React = require('react');
-var {LineChart} = require('react-d3');
+var HighCharts = require('react-highcharts');
+
+var auctions = require('./auctions');
+var {sum, cumsum} = require('./util');
 
 var bidderDistOptions = [
   {value: 'uniform01', text: 'Uniform[0,1]'}
 ];
 var bidderDistNames = {
   uniform01: 'Uniform[0,1]'
+}
+var bidderDists = {
+  uniform01: auctions.bidderDists.uniform01
 }
 var bidderNumOptions = [1,2,3,4,5,6,7,8,9];
 var mechanismOptions = [
@@ -16,16 +22,20 @@ var mechanismNames = {
   vickrey: 'Vickrey',
   myerson: 'Myerson'
 };
-var simulateOptions = [1,10,100];
+var mechanisms = {
+  vickrey: auctions.mechanisms.vickrey,
+  myerson: auctions.mechanisms.myerson
+};
+var simulateOptions = [1,10,100,1000,10000];
 
 var App = React.createClass({
   getInitialState: function () {
-    var longMessage = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.";
     return {
-      messages: ["Welcome to MechanSim!", longMessage, longMessage],
+      messages: ["Welcome to MechanSim! Use the controls above to run simulations."],
       bidderDistribution: 'uniform01',
-      numBidders: 1,
-      mechanism: 'vickrey'
+      numBidders: 2,
+      mechanism: 'vickrey',
+      revenueSeries: []
     };
   },
   emitMessage: function (message) {
@@ -37,27 +47,32 @@ var App = React.createClass({
     var bidderDistribution = event.target.value;
     this.emitMessage(`Selected bidder distribution: ${bidderDistNames[bidderDistribution]}`);
     this.setState({bidderDistribution});
-    // todo: clear data area
+    this.setState({revenueSeries: []});
   },
   changeNumBidders: function (event) {
     var numBidders = event.target.value;
     this.emitMessage(`Selected number of bidders: ${numBidders}`);
     this.setState({numBidders});
-    // todo: clear data area
+    this.setState({revenueSeries: []});
   },
   changeMechanism: function (event) {
     var mechanism = event.target.value;
     this.emitMessage(`Selected mechanism: ${mechanismNames[mechanism]}`);
     this.setState({mechanism});
-    // todo: clear data area
+    this.setState({revenueSeries: []});
   },
   simulateAuction: function (event) {
-    var numTimes = parseInt(event.target.value, 10);
-    var bidderDistribution = bidderDistNames[this.state.bidderDistribution];
+    var numRounds = parseInt(event.target.value, 10);
+    var bidderDistributionName = bidderDistNames[this.state.bidderDistribution];
     var numBidders = parseInt(this.state.numBidders, 10);
-    var mechanism = mechanismNames[this.state.mechanism];
-    this.emitMessage(`Simulating ${mechanism} auction with ${numBidders} ${bidderDistribution} bidders (${numTimes} times)`);
-    // todo: actually simulate auction and display results in data area
+    var mechanismName = mechanismNames[this.state.mechanism];
+    var bidderDistribution = bidderDists[this.state.bidderDistribution];
+    var mechanism = mechanisms[this.state.mechanism];
+    var result = auctions.simulateAuction(bidderDistribution, mechanism, numBidders, numRounds);
+    this.emitMessage(`Simulated ${mechanismName} auction with ${numBidders} ${bidderDistributionName} bidders (${numRounds} times). ${result.message}`);
+    this.setState(({revenueSeries}) => ({
+      revenueSeries: revenueSeries.concat(result.revenueSeries)
+    }));
   },
   render: function () {
     return (
@@ -70,7 +85,7 @@ var App = React.createClass({
                      onMechanismChange={this.changeMechanism}
                      onSimulate={this.simulateAuction} />
         <hr />
-        <OutputPane messages={this.state.messages} />
+        <OutputPane messages={this.state.messages} revenueSeries={this.state.revenueSeries} />
       </div>
     );
   }
@@ -135,7 +150,7 @@ var OutputPane = React.createClass({
       // <div className="outputPane">OutputPane placeholder</div>
       <table className="outputPane" style={styles.table}><tr>
         <td style={styles.td}><MessageBox messages={this.props.messages} /></td>
-        <td style={styles.td}><DataBox /></td>
+        <td style={styles.td}><DataBox revenueSeries={this.props.revenueSeries} /></td>
       </tr></table>
     );
   }
@@ -144,7 +159,7 @@ var OutputPane = React.createClass({
 var MessageBox = React.createClass({
   render: function () {
     var style = {
-      height: '20em',
+      height: '30em',
       border: '1px solid black',
       padding: '0 1em',
       overflowY: 'auto'
@@ -161,23 +176,46 @@ var MessageBox = React.createClass({
 var DataBox = React.createClass({
   render: function () {
     var style = {
-      height: '20em',
+      height: '30em',
       border: '1px solid black',
       padding: '0 1em',
       overflowY: 'auto'
     };
-    var sampleLineData = [
-      {
-        name: "revenue",
-        values: [{x: 0, y: 0}, {x: 1, y: 20}, {x: 2, y: 35}, {x: 3, y: 48}]
+    var revenueSeries = this.props.revenueSeries;
+    var numRounds = revenueSeries.length;
+    var cumulativeRevenue = cumsum(revenueSeries);
+    var totalRevenue = cumulativeRevenue[numRounds];
+    var averageRevenue = totalRevenue/numRounds;
+    var lineChartConfig = {
+      title: {text: "Revenue per Round"},
+      xAxis: {
+        min: 0,
+        minRange: 1
+      },
+      yAxis: {
+        title: {text: "Revenue"},
+        min: 0,
+        minRange: 0.05
+      },
+      series: [{
+        name: "Myerson",
+        data: cumulativeRevenue
+      }],
+      plotOptions: {
+        line: {animation: false}
       }
-    ];
-    return (
+    };
+    var ret = (
       <div className="dataBox" style={style}>
-        <h2>DataBox placeholder</h2>
-        <LineChart data={sampleLineData} width={300} height={200} title="Revenue per Auction" />
+      <ul>
+        <li>Number of rounds simulated: {numRounds}</li>
+        <li>Cumulative revenue: {totalRevenue.toFixed(3)}</li>
+        <li>Average revenue per round: {averageRevenue.toFixed(3)}</li>
+      </ul>
+        <HighCharts config={lineChartConfig} />
       </div>
     );
+    return ret;
   }
 });
 
