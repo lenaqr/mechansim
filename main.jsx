@@ -239,7 +239,7 @@ var DataBox = React.createClass({
     revenueCurve.unshift([0,0]);
     revenueCurve.push([1,0]);
     var trueDist = bidderDists[this.props.bidderDistribution];
-    var trueCDF = Array.from(Array(101)).map((_, i) => [i/100, trueDist.CDF(i/100)]);
+    var trueCDF = Array.from(Array(1001)).map((_, i) => [i/1000, trueDist.CDF(i/1000)]);
     var trueRevenueCurve = trueCDF.map(([q, val]) => [q, val*(1-q)]);
     var bidDataChartConfig = {
       title: {text: "Value distribution"},
